@@ -16,6 +16,9 @@
 #define kDecayFactor 0.8f
 #define kMinStability 0.7f
 
+static int counterForFailToGetName = 0.0;
+static char imageStringForName[64];
+
 void scanner_initialize(ScannerState *state) {
   scanner_reset(state);
 }
@@ -36,6 +39,111 @@ void scanner_reset(ScannerState *state) {
 
 void scanner_add_frame(ScannerState *state, IplImage *y, FrameScanResult *result) {
   scanner_add_frame_with_expiry(state, y, false, result);
+}
+
+void getPredicationOfNameGroup(IplImage *card_y,GroupedRectsList &name_groups,std::vector<TensorFlowPredication> &preds){
+  if (name_groups.empty()) {
+    return;
+  }
+  
+  std::vector<TensorFlowPredication> temp;
+  static IplImage *as_float = NULL;
+  if (as_float == NULL) {
+    as_float = cvCreateImage(cvSize(kNameCharacterImageWidth, kNameCharacterImageHeight), IPL_DEPTH_8U, 1);
+  }
+  
+  float newSum = 0.0;
+  bool newHasUnder = false;
+  GroupedRects groupR = name_groups.front();
+  
+  if(abs(groupR.left - 32) > 3){
+    return;
+  }
+  
+  for (int character_index = 0; character_index < groupR.character_rects.size(); character_index++) {
+    CharacterRectListIterator rect = groupR.character_rects.begin() + character_index;
+    //prepare_image_for_name_cat(card_y, as_float, rect);
+    cvSetImageROI(card_y, cvRect(rect->left, rect->top, kTrimmedCharacterImageWidth, kTrimmedCharacterImageHeight));
+    IplImage *temp_image = cvCreateImage (cvSize(kNameCharacterImageWidth , kNameCharacterImageHeight ), card_y->depth, card_y->nChannels);
+    cvResize(card_y,temp_image);
+    TensorFlowPredication pred = ApplyTensorflow::sharedInstance()->predicationFromImage(temp_image);
+    cvReleaseImage(&temp_image);
+    cvResetImageROI(card_y);
+    newSum += pred.pValue;
+    temp.push_back(pred);
+    if(pred.pValue < 0.5){
+      newHasUnder = true;
+    }
+    //dmz_debug_print("predication %c-%f.\n",pred.predication,pred.pValue);
+  }
+  float newStability = newSum/(float)groupR.character_rects.size();
+  
+  float oldStability = 0.0;
+  bool oldHasUnder = false;
+  if(preds.size() > 0){
+    std::vector<TensorFlowPredication>::iterator it;
+    float oldSum = 0.0;
+    std::string fullName("");
+    for(it=preds.begin() ; it < preds.end(); it++) {
+      oldSum += it->pValue;
+      if(it->pValue < 0.5){
+        oldHasUnder = true;
+      }
+    }
+    oldStability = oldSum / (float)preds.size();
+  }
+  
+  dmz_debug_print("old Stability %f, new one %f.\n",oldStability, newStability);
+  bool takeTheNewOne = false;
+  if(newStability > oldStability){
+    if(newHasUnder && !oldHasUnder && oldStability > 0.7){
+      return;
+    }
+    if(newHasUnder && oldHasUnder){
+      takeTheNewOne = true;
+      preds.clear();
+      preds.insert(std::end(preds), std::begin(temp), std::end(temp));
+    }
+    if(!newHasUnder){
+      takeTheNewOne = true;
+      preds.clear();
+      preds.insert(std::end(preds), std::begin(temp), std::end(temp));
+    }
+    if(oldStability == 0.0){
+      takeTheNewOne = true;
+      preds.clear();
+      preds.insert(std::end(preds), std::begin(temp), std::end(temp));
+    }
+  }else{
+    if(oldHasUnder && !newHasUnder && newStability > 0.7){
+      takeTheNewOne = true;
+      preds.clear();
+      preds.insert(std::end(preds), std::begin(temp), std::end(temp));
+    }
+  }
+  if (takeTheNewOne) {
+    
+    cvSetImageROI(card_y, cvRect(groupR.left, groupR.top, groupR.width, groupR.height));
+    sprintf(imageStringForName, "full-name-image.png");
+    ios_save_file(imageStringForName, card_y);
+    cvResetImageROI(card_y);
+    
+    for (int character_index = 0; character_index < groupR.character_rects.size(); character_index++) {
+      CharacterRectListIterator rect = groupR.character_rects.begin() + character_index;
+      cvSetImageROI(card_y, cvRect(rect->left, rect->top, kTrimmedCharacterImageWidth, kTrimmedCharacterImageHeight));
+      IplImage *temp_image = cvCreateImage (cvSize(kNameCharacterImageWidth , kNameCharacterImageHeight ), card_y->depth, card_y->nChannels);
+      cvResize(card_y,temp_image);
+      
+      sprintf(imageStringForName, "%d-name-image.png",character_index);
+      ios_save_file(imageStringForName, card_y);
+      
+      sprintf(imageStringForName, "%d-temp-name-image.png",character_index);
+      ios_save_file(imageStringForName, temp_image);
+      
+      cvReleaseImage(&temp_image);
+      cvResetImageROI(card_y);
+    }
+  }
 }
 
 void scanner_add_frame_with_expiry(ScannerState *state, IplImage *y, bool scan_expiry, FrameScanResult *result) {
@@ -62,9 +170,12 @@ void scanner_add_frame_with_expiry(ScannerState *state, IplImage *y, bool scan_e
   if (still_need_to_scan_expiry) {
     state->scan_expiry = true;
     expiry_extract(y, state->expiry_groups, result->expiry_groups, &state->expiry_month, &state->expiry_year);
-    state->name_groups = result->name_groups;  // for now, for the debugging display
+    //name_extract(y,state->name_groups,result->name_groups,&state->first_name,&state->second_name);
   }
 #endif
+  
+  state->name_groups = result->name_groups;  // for now, for the debugging display
+  getPredicationOfNameGroup(y,state->name_groups,state->predications);
   
   if (still_need_to_collect_card_number) {
     
@@ -159,7 +270,60 @@ void scanner_result(ScannerState *state, ScannerResult *result) {
       state->successfulCardNumberResult = *result;
     }
   }
-
+  //HZZ MARK
+  double underThreshold = 0.6;
+  double statbilityThreshold = 0.9;
+  
+  if (counterForFailToGetName > 100){
+    underThreshold = 0.0;
+    statbilityThreshold = 0.5;
+  }else if (counterForFailToGetName > 60){
+    underThreshold = 0.3;
+    statbilityThreshold = 0.5;
+  }else if (counterForFailToGetName > 40){
+    underThreshold = 0.4;
+    statbilityThreshold = 0.65;
+  }else if(counterForFailToGetName > 20){
+    underThreshold = 0.4;
+    statbilityThreshold = 0.7;
+  }else if(counterForFailToGetName > 10){
+    underThreshold = 0.5;
+    statbilityThreshold = 0.8;
+  }
+  
+  if(state->predications.size() > 0){
+    std::vector<TensorFlowPredication>::iterator it;
+    float sum = 0.0;
+    std::string fullName("");
+    bool hasUnder = false;
+    for(it=state->predications.begin() ; it < state->predications.end(); it++) {
+      dmz_debug_print("predication %c, %f.\n",it->predication, it->pValue);
+      if(it->pValue < underThreshold){
+        hasUnder = true;
+      }
+      sum += it->pValue;
+      fullName+=it->predication;
+    }
+    float nStability = sum / (float)state->predications.size();
+    dmz_debug_print("name predication stability %f. fail Time %d ...%f...%f\n",nStability,counterForFailToGetName,underThreshold,statbilityThreshold);
+    if(nStability < statbilityThreshold || hasUnder){
+      counterForFailToGetName ++;
+      return;
+    }else{
+      counterForFailToGetName = 0.0;
+      dmz_debug_print("Finsh ... name predication stability %f  result %s\n",nStability,fullName.c_str());
+      state->full_name = fullName;
+    }
+  }else if (counterForFailToGetName > 10){
+    counterForFailToGetName = 0.0;
+  }else{
+    return;
+  }
+  
+  result->first_name = state->first_name;
+  result->second_name = state->second_name;
+  result->full_name = state->full_name;
+  result->name_groups = state->name_groups;
   // Once the card number has been successfully scanned, then wait a bit longer for successful expiry scan (if collecting expiry)
   if (state->timeOfCardNumberCompletionInMilliseconds > 0) {
 #if SCAN_EXPIRY
@@ -178,7 +342,7 @@ void scanner_result(ScannerState *state, ScannerResult *result) {
         result->expiry_year = state->expiry_year;
 #if DMZ_DEBUG
         result->expiry_groups = state->expiry_groups;
-        result->name_groups = state->name_groups;
+        //result->name_groups = state->name_groups;
 #endif
         result->complete = true;
 

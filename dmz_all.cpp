@@ -37,6 +37,7 @@
     #include "./models/expiry/modelm_730c4cbd.cpp"
     #include "./scan/expiry_categorize.cpp"
     #include "./scan/expiry_seg.cpp"
+    #include "./scan/name_seg.cpp"
   #endif
 
 #else

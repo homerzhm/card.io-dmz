@@ -7,6 +7,7 @@
 #define DMZ_SCAN_FRAME_H
 
 #include "expiry_seg.h"
+#include "name_seg.h"
 #include "n_categorize.h"
 #include "opencv2/core/core_c.h" // needed for IplImage
 #include "dmz_macros.h"

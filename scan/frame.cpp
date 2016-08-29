@@ -69,7 +69,7 @@ DMZ_INTERNAL void scan_card_image(IplImage *y, bool collect_card_number, bool sc
   }
 
 #if SCAN_EXPIRY
-  if (scan_expiry && result->vseg.y_offset < kCreditCardTargetHeight - 2 * kSmallCharacterHeight) {
+  if (scan_expiry && result->vseg.y_offset < kCreditCardTargetHeight - 2 * kSmallCharacterHeight) {//scan_expiry &&
     best_expiry_seg(y, result->vseg.y_offset, result->expiry_groups, result->name_groups);
   #if DMZ_DEBUG
     if (result->expiry_groups.empty()) {
@@ -78,6 +78,12 @@ DMZ_INTERNAL void scan_card_image(IplImage *y, bool collect_card_number, bool sc
   #endif
   }
 #endif
+  best_name_seg(y, result->vseg.y_offset,result->name_groups);
+  if (result->name_groups.empty()) {
+    dmz_debug_log("HZ2....name segmentation fail.");
+  }else{
+    dmz_debug_log("HZ2....name segmentation Success.");
+  }
 }
 
 #if CYTHON_DMZ
