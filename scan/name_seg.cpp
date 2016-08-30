@@ -71,7 +71,7 @@ void gather_character_rects_name(GroupedRects &group, const GroupedRects &sub_gr
 void strip_group_name_white_space(GroupedRects &group) {
   // Strip leading or trailing "white-space" from super-groups, based on the average sum of the central 4 character rects
   if (group.character_rects.size() > 5) {
-#define WHITESPACE_THRESHOLD_NAME 0.65
+#define WHITESPACE_THRESHOLD_NAME 0.45
     bool white_space_found = false;
     size_t index = (group.character_rects.size() - 4) / 2;
     long threshold_sum = (long)(((group.character_rects[index + 0].sum +
@@ -325,7 +325,7 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
   int     expanded_stripe_top = stripe_base_row - 1;
   CvRect  expanded_stripe_rect = cvRect(0, expanded_stripe_top, card_image_size.width, MIN(kSmallCharacterHeight + 2, card_image_size.height - expanded_stripe_top));
   // Any rect whose pixel-sum is less than rectangle_summation_threshold is too dim to care about
-#define RECT_AVERAGE_THRESHOLD_FACTOR 9
+#define RECT_AVERAGE_THRESHOLD_FACTOR 5
   long rect_average_based_on_stripe_sum = ((stripe_sum * kSmallCharacterWidth) / card_image_size.width);
   float rectangle_summation_threshold = rect_average_based_on_stripe_sum / RECT_AVERAGE_THRESHOLD_FACTOR;
   
@@ -350,6 +350,7 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
     // Record pixel-sum of current character rect (ignoring excessively dim rects)
     
     if (rect_sum > rectangle_summation_threshold) {
+        //dmz_debug_print("Success put rect  .... %d\n",col);
       CharacterRect rect;
       rect.top = expanded_stripe_rect.y;
       rect.left = col;
@@ -358,6 +359,18 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
       
       rect_sum_total += (float)rect_sum;
     }
+//    else {
+//         dmz_debug_print("force to put rect  .... %d\n",col);
+//        if (abs(col -32) < 3){
+//            dmz_debug_print("force to put rect Success  .... %d\n",col);
+//            CharacterRect rect;
+//            rect.top = expanded_stripe_rect.y;
+//            rect.left = col;
+//            rect.sum = rect_sum;
+//            rect_list.push_back(rect);
+//            rect_sum_total += (float)rect_sum;
+//        }
+//    }
     
     if (col < card_image_size.width - kSmallCharacterWidth) {
       
@@ -387,10 +400,14 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
   
   bool non_overlapping_rect_mask[expanded_stripe_rect.width];
   memset(non_overlapping_rect_mask, 0, sizeof(non_overlapping_rect_mask));
-  
+  //dmz_debug_print("checking rect  .... %d... rect_list.size .. %d\n",expanded_stripe_top,rect_list.size());
   for (CharacterRectListIterator rect = rect_list.begin(); rect != rect_list.end(); ++ rect) {
+      //dmz_debug_print("checking rect inside loop  .... %d\n",rect->left);
     if ((float)rect->sum <= rect_sum_threshold) {
-      break;
+        //dmz_debug_print("don't like rect  .... %d\n",rect->left);
+        if (abs(rect->left - 32) > 3) {
+            continue;
+        }
     }
     
     if (!non_overlapping_rect_mask[rect->left] && !non_overlapping_rect_mask[rect->left + kSmallCharacterWidth - 1]) {
@@ -403,7 +420,7 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
       grouped_rect.sum = rect->sum;
       grouped_rect.character_width = kSmallCharacterWidth;
       non_overlapping_rect_list.push_back(grouped_rect);
-      
+      //dmz_debug_print("puting rect  .... %d\n",rect->left);
       assert(8 == kSmallCharacterWidth - 1);
       non_overlapping_rect_mask[rect->left + 0] = true;
       non_overlapping_rect_mask[rect->left + 1] = true;
