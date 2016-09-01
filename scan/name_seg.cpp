@@ -405,7 +405,7 @@ void find_character_groups_for_stripe(IplImage *card_y, IplImage *sobel_image, i
       //dmz_debug_print("checking rect inside loop  .... %d\n",rect->left);
     if ((float)rect->sum <= rect_sum_threshold) {
         //dmz_debug_print("don't like rect  .... %d\n",rect->left);
-        if (abs(rect->left - 32) > 3) {
+        if (abs(rect->left - 32) > 1) {
             continue;
         }
     }

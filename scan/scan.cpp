@@ -324,6 +324,7 @@ void scanner_result(ScannerState *state, ScannerResult *result) {
   result->second_name = state->second_name;
   result->full_name = state->full_name;
   result->name_groups = state->name_groups;
+  result->namePredications = state->predications;
   // Once the card number has been successfully scanned, then wait a bit longer for successful expiry scan (if collecting expiry)
   if (state->timeOfCardNumberCompletionInMilliseconds > 0) {
 #if SCAN_EXPIRY

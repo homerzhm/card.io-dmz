@@ -11,6 +11,7 @@
 #include "scan_analytics.h"
 #include "expiry_seg.h"
 #include <sys/time.h>
+#include "ApplyTensorflow.h"
 
 // TODO: Somewhere expose some data+analytics to send to a server for future model training...
 
@@ -24,6 +25,10 @@ typedef struct {
   uint8_t n_numbers;
   int expiry_month;
   int expiry_year;
+  std::string first_name;
+  std::string second_name;
+  std::string full_name;
+  std::vector<TensorFlowPredication> namePredications;
 #if DMZ_DEBUG
   GroupedRectsList expiry_groups;
   GroupedRectsList name_groups;
@@ -43,6 +48,10 @@ typedef struct {
   bool scan_expiry;
   int expiry_month;
   int expiry_year;
+  std::string first_name;
+  std::string second_name;
+  std::string full_name;
+  std::vector<TensorFlowPredication> predications;
   GroupedRectsList expiry_groups;
   GroupedRectsList name_groups;
 } ScannerState;
